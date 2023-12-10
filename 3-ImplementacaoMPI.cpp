@@ -76,10 +76,9 @@ vector<int> FindMaximumClique(
 
 int main(int argc, char **argv) {
 
-    int numVertices = 40;
+    int numVertices = 45;
     vector<vector<int>> graph;
 
-    // Assuming ReadGraph does what LerGrafo does
     graph = ReadGraph("grafo_gerado.txt", numVertices);
 
     vector<int> candidates;
