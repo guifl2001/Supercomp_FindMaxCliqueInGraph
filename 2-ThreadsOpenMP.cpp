@@ -38,7 +38,6 @@ std::tuple<std::vector<int>, std::vector<int>> CliqueCheck(
                 }
             }
             if (adjacentToAll) {
-                #pragma omp critical
                 updatedCandidates.push_back(u);
             }
         }
@@ -55,6 +54,11 @@ std::vector<int> FindMaximumClique(
     const std::vector<int> &currentClique) {
     std::vector<int> maximumClique = currentClique;
 
+    // Poda por limites
+    if (currentClique.size() + candidates.size() <= maximumClique.size()) {
+        return maximumClique;
+    }
+
     #pragma omp parallel for
     for (int candidate : candidates) {
         std::vector<int> newCandidates;
@@ -65,7 +69,6 @@ std::vector<int> FindMaximumClique(
             newClique = FindMaximumClique(graph, newCandidates, newClique);
         }
 
-        #pragma omp critical
         if (newClique.size() >= maximumClique.size()) {
             maximumClique = newClique;
         }
@@ -75,7 +78,7 @@ std::vector<int> FindMaximumClique(
 }
 
 int main() {
-    int numVertices = 50;
+    int numVertices = 45;
     std::vector<std::vector<int>> graph;
     graph = ReadGraph("grafo.txt", numVertices);
 

@@ -5,7 +5,7 @@
 #include <vector>
 #include "ReadGraph.cpp"
 
-// Function to check if a node belongs to the clique
+// Function to check if a vertex belongs to the clique
 std::tuple<std::vector<int>, std::vector<int>> CliqueCheck(
     const std::vector<std::vector<int>> &graph,
     const std::vector<int> &candidates,
@@ -45,12 +45,23 @@ std::tuple<std::vector<int>, std::vector<int>> CliqueCheck(
     return std::make_tuple(newClique, newCandidates);
 }
 
-// Function to find the maximum clique in a graph
-std::vector<int> FindMaximumClique(
+// Function to find the maximum clique in a graph with pruning by bounds
+std::vector<int> FindMaximumCliqueWithPruining(
     const std::vector<std::vector<int>> &graph,
     const std::vector<int> &candidates,
-    const std::vector<int> &currentClique) {
-    std::vector<int> maximumClique = currentClique;
+    const std::vector<int> &currentClique,
+    std::vector<int> &maximumClique) {
+    if (candidates.empty()) {
+        if (currentClique.size() > maximumClique.size()) {
+            maximumClique = currentClique;
+        }
+        return maximumClique;
+    }
+
+    // Poda por limites
+    if (currentClique.size() + candidates.size() <= maximumClique.size()) {
+        return maximumClique;
+    }
 
     for (int candidate : candidates) {
         std::vector<int> newCandidates;
@@ -58,7 +69,7 @@ std::vector<int> FindMaximumClique(
         std::tie(newClique, newCandidates) = CliqueCheck(graph, candidates, currentClique, candidate);
 
         if (!newCandidates.empty()) {
-            newClique = FindMaximumClique(graph, newCandidates, newClique);
+            newClique = FindMaximumCliqueWithPruining(graph, newCandidates, newClique, maximumClique);
         }
 
         if (newClique.size() >= maximumClique.size()) {
@@ -70,7 +81,7 @@ std::vector<int> FindMaximumClique(
 }
 
 int main() {
-    int numVertices = 45;
+    int numVertices = 10;
     std::vector<std::vector<int>> graph;
     graph = ReadGraph("grafo.txt", numVertices);
 
@@ -80,18 +91,24 @@ int main() {
     }
 
     std::vector<int> initialClique;
+    std::vector<int> maximumClique;
 
     double startTime = omp_get_wtime();
 
-    std::vector<int> maximumClique = FindMaximumClique(graph, allVertices, initialClique);
+    maximumClique = FindMaximumCliqueWithPruining(graph, allVertices, initialClique, maximumClique);
 
     double duration = omp_get_wtime() - startTime;
 
-    std::cout << "Maximum clique: ";
-    for (int u : maximumClique) {
-        std::cout << u + 1 << " ";
+    // SORT AND PRINT
+    std::sort(maximumClique.begin(), maximumClique.end());
+    std::cout << "Maximum clique found of size " << maximumClique.size() << ": [";
+    for (size_t i = 0; i < maximumClique.size(); ++i) {
+        std::cout << maximumClique[i] + 1;
+        if (i < maximumClique.size() - 1) {
+            std::cout << ", ";
+        }
     }
-    std::cout << std::endl;
+    std::cout << "]" << std::endl;
 
     std::cout << "Duration: " << duration << " s";
 

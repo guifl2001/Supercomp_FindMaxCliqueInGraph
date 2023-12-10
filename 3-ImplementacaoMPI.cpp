@@ -1,19 +1,19 @@
-#include "ReadGraph.cpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
-#include <tuple>
 #include <vector>
+#include "ReadGraph.cpp"
 
-// Function to check if a node belongs to the clique
-std::tuple<std::vector<int>, std::vector<int>> CliqueCheck(
-    const std::vector<std::vector<int>> &graph,
-    const std::vector<int> &candidates,
-    const std::vector<int> &currentClique,
+using namespace std;
+
+tuple<vector<int>, vector<int>> CliqueCheck(
+    const vector<vector<int>> &graph,
+    const vector<int> &candidates,
+    const vector<int> &currentClique,
     int vertex) {
-    std::vector<int> newCandidates = candidates;
-    newCandidates.erase(std::remove(newCandidates.begin(), newCandidates.end(), vertex), newCandidates.end());
+    vector<int> newCandidates = candidates;
+    newCandidates.erase(remove(newCandidates.begin(), newCandidates.end(), vertex), newCandidates.end());
 
     bool canAdd = true;
     for (int u : currentClique) {
@@ -23,11 +23,11 @@ std::tuple<std::vector<int>, std::vector<int>> CliqueCheck(
         }
     }
 
-    std::vector<int> newClique = currentClique;
+    vector<int> newClique = currentClique;
     if (canAdd) {
         newClique.push_back(vertex);
 
-        std::vector<int> updatedCandidates;
+        vector<int> updatedCandidates;
         for (int u : newCandidates) {
             bool adjacentToAll = true;
             for (int c : newClique) {
@@ -43,20 +43,24 @@ std::tuple<std::vector<int>, std::vector<int>> CliqueCheck(
         newCandidates = updatedCandidates;
     }
 
-    return std::make_tuple(newClique, newCandidates);
+    return make_tuple(newClique, newCandidates);
 }
 
-// Function to find the maximum clique in a graph
-std::vector<int> FindMaximumClique(
-    const std::vector<std::vector<int>> &graph,
-    const std::vector<int> &candidates,
-    const std::vector<int> &currentClique) {
-    std::vector<int> maximumClique = currentClique;
+vector<int> FindMaximumClique(
+    const vector<vector<int>> &graph,
+    const vector<int> &candidates,
+    const vector<int> &currentClique) {
+    vector<int> maximumClique = currentClique;
+
+    // Poda por limites
+    if (currentClique.size() + candidates.size() <= maximumClique.size()) {
+        return maximumClique;
+    }
 
     for (int candidate : candidates) {
-        std::vector<int> newCandidates;
-        std::vector<int> newClique;
-        std::tie(newClique, newCandidates) = CliqueCheck(graph, candidates, currentClique, candidate);
+        vector<int> newCandidates;
+        vector<int> newClique;
+        tie(newClique, newCandidates) = CliqueCheck(graph, candidates, currentClique, candidate);
 
         if (!newCandidates.empty()) {
             newClique = FindMaximumClique(graph, newCandidates, newClique);
@@ -70,67 +74,93 @@ std::vector<int> FindMaximumClique(
     return maximumClique;
 }
 
-int main(int argc, char *argv[]) {
-    MPI_Init(&argc, &argv);
+int main(int argc, char **argv) {
 
-    int rank, size;
+    int numVertices = 40;
+    vector<vector<int>> graph;
+
+    // Assuming ReadGraph does what LerGrafo does
+    graph = ReadGraph("grafo_gerado.txt", numVertices);
+
+    vector<int> candidates;
+    for (int i = 0; i <= numVertices - 1; i++) {
+        candidates.push_back(i);
+    }
+
+    int i;
+    MPI_Status status;
+    int myStart = 0, myEnd = 0;
+    int candPerProc = 0;
+    vector<int> MaximumClique;
+    vector<int> PartialMaximumClique;
+    vector<int> MaximumCliqueSizeVector;
+    int MaximumCliqueSize;
+    int size;
+
+    MPI_Init(&argc, &argv);
+    int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (size != 2) {
-        std::cerr << "This example assumes 2 MPI processes." << std::endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    int numVertices = 50;
-    std::vector<std::vector<int>> graph;
-    std::vector<int> allVertices;
-    std::vector<int> initialClique;
-
     if (rank == 0) {
-        graph = ReadGraph("grafo.txt", numVertices);
+        candPerProc = candidates.size() / size;
+        for (i = 1; i < size; i++) {
+            MPI_Send(&candPerProc, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        }
+    } else {
+        MPI_Recv(&candPerProc, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+    }
 
-        for (int i = 0; i < numVertices; ++i) {
-            allVertices.push_back(i);
+    myStart = rank * candPerProc;
+    myEnd = myStart + candPerProc;
+    for (i = myStart; i < myEnd; i++) {
+        vector<int> newCandidates;
+        vector<int> newClique;
+        tie(newClique, newCandidates) = CliqueCheck(graph, candidates, newClique, i);
+
+        if (!newCandidates.empty()) {
+            newClique = FindMaximumClique(graph, newCandidates, newClique);
+        }
+
+        if (newClique.size() >= MaximumClique.size()) {
+            MaximumClique = newClique;
         }
     }
 
-    MPI_Bcast(&numVertices, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (rank == 1) {
-        graph.resize(numVertices, std::vector<int>(numVertices, 0));
+    if (rank != 0) {
+        MaximumCliqueSize = MaximumClique.size();
+        MPI_Send(&MaximumCliqueSize, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    } else {
+        for (i = 1; i < size; i++) {
+            MPI_Recv(&MaximumCliqueSize, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &status);
+            MaximumCliqueSizeVector.push_back(MaximumCliqueSize);
+        }
     }
 
-    MPI_Bcast(graph.data(), numVertices * numVertices, MPI_INT, 0, MPI_COMM_WORLD);
-
-    double startTime = MPI_Wtime();
-
-    std::vector<int> localClique = FindMaximumClique(graph, allVertices, initialClique);
-
-    double duration = MPI_Wtime() - startTime;
-
-    if (rank == 0) {
-        std::vector<int> remoteClique(size);
-
-        MPI_Recv(remoteClique.data(), size, MPI_INT, 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        // Combine results from different processes
-        if (remoteClique.size() > localClique.size()) {
-            localClique = remoteClique;
+    if (rank != 0) {
+        MPI_Send(&MaximumClique[0], MaximumClique.size(), MPI_INT, 0, 0, MPI_COMM_WORLD);
+    } else {
+        for (i = 1; i < size; i++) {
+            PartialMaximumClique.resize(MaximumCliqueSizeVector[i - 1]);
+            MPI_Recv(&PartialMaximumClique[0], PartialMaximumClique.size(), MPI_INT, i, 0, MPI_COMM_WORLD, &status);
+            if (PartialMaximumClique.size() >= MaximumClique.size()) {
+                MaximumClique = PartialMaximumClique;
+            }
         }
-
-        std::cout << "Maximum clique: ";
-        for (int u : localClique) {
-            std::cout << u + 1 << " ";
+        sort(MaximumClique.begin(), MaximumClique.end());
+        cout << "Maximum clique size: " << MaximumClique.size() << endl;
+        cout << "Maximum clique: "
+             << ": [";
+        for (auto &v : MaximumClique) {
+            if (&v == &MaximumClique.back()) {
+                cout << v + 1;
+            } else {
+                cout << v + 1 << ", ";
+            }
         }
-        std::cout << std::endl;
-
-        std::cout << "Duration: " << duration << " s" << std::endl;
-    } else if (rank == 1) {
-        MPI_Send(localClique.data(), localClique.size(), MPI_INT, 0, 0, MPI_COMM_WORLD);
+        cout << "]" << endl;
     }
 
     MPI_Finalize();
-
     return 0;
 }
