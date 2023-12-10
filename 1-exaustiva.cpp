@@ -81,7 +81,7 @@ std::vector<int> FindMaximumCliqueWithPruining(
 }
 
 int main() {
-    int numVertices = 10;
+    int numVertices = 45;
     std::vector<std::vector<int>> graph;
     graph = ReadGraph("grafo.txt", numVertices);
 
@@ -99,16 +99,11 @@ int main() {
 
     double duration = omp_get_wtime() - startTime;
 
-    // SORT AND PRINT
-    std::sort(maximumClique.begin(), maximumClique.end());
-    std::cout << "Maximum clique found of size " << maximumClique.size() << ": [";
-    for (size_t i = 0; i < maximumClique.size(); ++i) {
-        std::cout << maximumClique[i] + 1;
-        if (i < maximumClique.size() - 1) {
-            std::cout << ", ";
-        }
+    std::cout << "Maximum clique: ";
+    for (int u : maximumClique) {
+        std::cout << u + 1 << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << std::endl;
 
     std::cout << "Duration: " << duration << " s";
 
